@@ -15,7 +15,7 @@ ENV_VAR = {
     'TELEGRAM_CHAT_ID': os.getenv('TELEGRAM_CHAT_ID'),
 }
 
-RETRY_TIME = 20
+RETRY_TIME = 300
 HEADERS = {'Authorization': f'OAuth {ENV_VAR.get("PRACTICUM_TOKEN")}'}
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 
@@ -85,12 +85,14 @@ def get_api_answer(url, current_timestamp):
 def parse_status(homework):
     """Анализ словаря с данными о домашней работе."""
     verdict = homework.get('status')
-    homework_name = homework.get('lesson_name')
+    homework_name = homework.get('homework_name')
 
-    if verdict in HOMEWORK_STATUSES.keys():
-        return f'Изменился статус проверки работы "{homework_name}". {verdict}'
+    message = (
+        f'Изменился статус проверки работы "{homework_name}". ',
+        f'{HOMEWORK_STATUSES.get(verdict)}'
+    )
 
-    raise ErrorException(f'Статус "{verdict}" в API-ответе не распознан')
+    return message[0] + message[1]
 
 
 def check_response(response):
@@ -99,7 +101,12 @@ def check_response(response):
 
     if homework is not None:
         if len(homework) > 0:
-            return homework[0]
+            homework = homework[0]
+
+            if homework.get('status') in HOMEWORK_STATUSES.keys():
+                return homework
+
+            raise ErrorException('Статус работы в API-ответе не распознан')
 
         raise DebugException('Нет обновлений')
 
