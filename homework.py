@@ -164,7 +164,6 @@ def main():
         finally:
             try:
                 time.sleep(RETRY_TIME)
-                continue
 
             except KeyboardInterrupt:
                 break
