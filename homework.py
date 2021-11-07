@@ -12,7 +12,7 @@ load_dotenv()
 ENV_VAR = {
     'PRACTICUM_TOKEN': os.getenv('PRACTICUM_TOKEN'),
     'TELEGRAM_TOKEN': os.getenv('TELEGRAM_TOKEN'),
-    'CHAT_ID': os.getenv('TELEGRAM_ID'),
+    'TELEGRAM_CHAT_ID': os.getenv('TELEGRAM_CHAT_ID'),
 }
 
 RETRY_TIME = 20
@@ -59,7 +59,7 @@ def send_message(bot, message):
     """Отправка сообщения выбранным ботом фиксированному пользователю."""
     try:
         bot.send_message(
-            chat_id=ENV_VAR.get('CHAT_ID'),
+            chat_id=ENV_VAR.get('TELEGRAM_CHAT_ID'),
             text=message
         )
         logging.info('Сообщение пользователю успешно отправлено')
