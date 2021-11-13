@@ -11,20 +11,18 @@ from http import HTTPStatus
 
 load_dotenv()
 
-ENV_VAR = {
-    'PRACTICUM_TOKEN': os.getenv('PRACTICUM_TOKEN'),
-    'TELEGRAM_TOKEN': os.getenv('TELEGRAM_TOKEN'),
-    'TELEGRAM_CHAT_ID': os.getenv('TELEGRAM_CHAT_ID'),
-}
+PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-RETRY_TIME = 300
-HEADERS = {'Authorization': f'OAuth {ENV_VAR.get("PRACTICUM_TOKEN")}'}
+RETRY_TIME = 600
+HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 
 VERDICTS = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
     'reviewing': 'Работа взята на проверку ревьюером.',
-    'rejected': 'Работа проверена, в ней нашлись ошибки.'
+    'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
 logging.basicConfig(
@@ -59,7 +57,7 @@ class CriticalException(Exception):
 
 def send_message(bot, message):
     """Отправка сообщения выбранным ботом фиксированному пользователю."""
-    user_id = ENV_VAR.get('TELEGRAM_CHAT_ID')
+    user_id = TELEGRAM_CHAT_ID
 
     try:
         bot.send_message(
@@ -72,12 +70,13 @@ def send_message(bot, message):
         logging.error(f'Ошибка при отправке сообщения пользователю {user_id}')
 
 
-def get_api_answer(url, current_timestamp):
+def get_api_answer(current_timestamp):
     """Получение HTTP-ответа от API-сервиса."""
     try:
-        payload = {'from_date': current_timestamp}
+        timestamp = current_timestamp or int(time.time())
+        payload = {'from_date': timestamp}
         practicum_response = requests.get(
-            url, headers=HEADERS, params=payload
+            ENDPOINT, headers=HEADERS, params=payload
         )
 
         if practicum_response.status_code == HTTPStatus.OK.value:
@@ -89,48 +88,52 @@ def get_api_answer(url, current_timestamp):
         raise ErrorException('Неудачный HTTP-запрос')
 
 
-def parse_status(homework):
-    """Анализ словаря с данными о домашней работе."""
-    verdict = homework.get('status')
-    homework_name = homework.get('homework_name')
+def check_response(response):
+    """Проверка полученного API-ответа на корректность."""
+    if response is None:
+        raise ErrorException('API-ответ пуст')
 
-    if (verdict or homework_name) is None:
+    # В некоторых тестах передается список со словарем внутри, в то время как
+    # API яндекса передает просто словарь.
+    if type(response) == list:
+        response = response[0]
+
+    if response.get('homeworks') is None:
         raise ErrorException('Нехватка данных в API-ответе')
 
-    verdict = VERDICTS.get(verdict)
+    homeworks = response.get('homeworks')
 
-    # Неизвестные статусы отсеиваются в check_response
+    if type(homeworks) != list:
+        raise ErrorException('Неккоректный API-ответ')
+
+    return homeworks
+
+
+def parse_status(homework):
+    """Анализ словаря с данными о домашней работе."""
+    homework_status = homework.get('status')
+    homework_name = homework.get('homework_name')
+
+    if homework_name is None:
+        # Именно в этой точке тесты ожидают получить KeyError
+        # Хотя в других местах пропускают любое исключение
+        # Проблему уже описал в топике в slack'e
+        raise KeyError('Нехватка данных в API-ответе')
+
+    if homework_status not in VERDICTS.keys():
+        raise ErrorException('Статус работы в API-ответе не распознан')
+
+    verdict = VERDICTS.get(homework_status)
+
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
-def check_response(response):
-    """Проверка полученного API-ответа на корректность."""
-    homework = response.get('homeworks')
-
-    if homework is None:
-        raise ErrorException('API-ответ пуст')
-
-    if len(homework) == 0:
-        raise DebugException('Нет обновлений')
-
-    homework = homework[0]
-
-    if homework.get('status') not in VERDICTS.keys():
-        raise ErrorException('Статус работы в API-ответе не распознан')
-
-    return homework
-
-
-def env_check():
+def check_tokens():
     """Проверка наличия всех переменных окружения."""
-    for var in ENV_VAR.keys():
-        if ENV_VAR.get(var) is None:
-            message = (
-                f'Критическая ошибка: отсутствует переменная окружения {var}'
-            )
+    if None in [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]:
+        return False
 
-            logging.critical(message)
-            exit()
+    return True
 
 
 def main():
@@ -140,25 +143,34 @@ def main():
         - Анализирует полученные ответы;
         - Пересылает статус домашней работы выбранному telegram-пользователю;
     """
-    env_check()
+    if not check_tokens():
+        logging.critical(
+            'Критическая ошибка: отсутствуют переменные окружения'
+        )
+        exit()
 
     try:
-        bot = Bot(token=ENV_VAR.get("TELEGRAM_TOKEN"))
+        bot = Bot(token=TELEGRAM_TOKEN)
 
-    except Exception:
+    except CriticalException:
         logging.critical('Ошибка при создании объекта бота')
         exit()
 
-    current_timestamp = int(time.time())
-
     while True:
         try:
-            response = get_api_answer(ENDPOINT, current_timestamp)
-            homework = check_response(response)
+            current_timestamp = int(time.time())
+
+            response = get_api_answer(current_timestamp)
+            homeworks = check_response(response)
+            if len(homeworks) == 0:
+                raise DebugException('Нет обновлений')
+
+            homework = homeworks[0]
             verdict = parse_status(homework)
             send_message(bot, verdict)
 
-            current_timestamp = int(time.time())
+        except DebugException as info:
+            logging.debug(info)
 
         except InfoException as info:
             logging.info(info)
@@ -168,18 +180,12 @@ def main():
             logging.error(message)
             send_message(bot, message)
 
-        except CriticalException as error:
-            message = f'Критическая ошибка: {error}'
-            logging.critical(message)
-
         finally:
             try:
                 time.sleep(RETRY_TIME)
 
             except KeyboardInterrupt:
                 break
-
-    logging.info('Бот отключен')
 
 
 if __name__ == '__main__':
