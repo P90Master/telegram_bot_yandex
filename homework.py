@@ -26,9 +26,10 @@ VERDICTS = {
 }
 
 logging.basicConfig(
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+logger = logging.getLogger(__name__)
 
 
 class DebugException(Exception):
@@ -64,10 +65,10 @@ def send_message(bot, message):
             chat_id=user_id,
             text=message
         )
-        logging.info(f'Сообщение пользователю {user_id} успешно отправлено')
+        logger.info(f'Сообщение пользователю {user_id} успешно отправлено')
 
     except Exception:
-        logging.error(f'Ошибка при отправке сообщения пользователю {user_id}')
+        logger.error(f'Ошибка при отправке сообщения пользователю {user_id}')
 
 
 def get_api_answer(current_timestamp):
@@ -95,7 +96,7 @@ def check_response(response):
 
     # В некоторых тестах передается список со словарем внутри, в то время как
     # API яндекса передает просто словарь.
-    if type(response) == list:
+    if isinstance(response, list):
         response = response[0]
 
     if response.get('homeworks') is None:
@@ -103,7 +104,7 @@ def check_response(response):
 
     homeworks = response.get('homeworks')
 
-    if type(homeworks) != list:
+    if not isinstance(homeworks, list):
         raise ErrorException('Неккоректный API-ответ')
 
     return homeworks
@@ -130,10 +131,7 @@ def parse_status(homework):
 
 def check_tokens():
     """Проверка наличия всех переменных окружения."""
-    if None in [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]:
-        return False
-
-    return True
+    return not None in [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
 
 
 def main():
@@ -144,7 +142,7 @@ def main():
         - Пересылает статус домашней работы выбранному telegram-пользователю;
     """
     if not check_tokens():
-        logging.critical(
+        logger.critical(
             'Критическая ошибка: отсутствуют переменные окружения'
         )
         exit()
@@ -153,7 +151,7 @@ def main():
         bot = Bot(token=TELEGRAM_TOKEN)
 
     except CriticalException:
-        logging.critical('Ошибка при создании объекта бота')
+        logger.critical('Ошибка при создании объекта бота')
         exit()
 
     while True:
@@ -170,14 +168,14 @@ def main():
             send_message(bot, verdict)
 
         except DebugException as info:
-            logging.debug(info)
+            logger.debug(info)
 
         except InfoException as info:
-            logging.info(info)
+            logger.info(info)
 
         except ErrorException as error:
             message = f'Сбой в работе программы: {error}'
-            logging.error(message)
+            logger.error(message)
             send_message(bot, message)
 
         finally:
