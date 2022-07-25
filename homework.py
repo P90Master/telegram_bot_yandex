@@ -118,7 +118,6 @@ def parse_status(homework):
     if homework_name is None:
         # Именно в этой точке тесты ожидают получить KeyError
         # Хотя в других местах пропускают любое исключение
-        # Проблему уже описал в топике в slack'e
         raise KeyError('Нехватка данных в API-ответе')
 
     if homework_status not in VERDICTS.keys():
