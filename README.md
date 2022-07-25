@@ -1,2 +1,2 @@
-# homework_bot
-python telegram bot
+# Telegram-бот
+Оповещает о проверенной работе в Практикуме
