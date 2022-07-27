@@ -34,25 +34,21 @@ logger = logging.getLogger(__name__)
 
 class DebugException(Exception):
     """Обработка исключений, требующих debug-сообщений."""
-
     pass
 
 
 class InfoException(Exception):
     """Обработка исключений, требующих info-сообщений."""
-
     pass
 
 
 class ErrorException(Exception):
     """Обработка исключений, требующих error-сообщений."""
-
     pass
 
 
 class CriticalException(Exception):
     """Обработка исключений, требующих critical-сообщений."""
-
     pass
 
 
@@ -94,8 +90,6 @@ def check_response(response):
     if response is None:
         raise ErrorException('API-ответ пуст')
 
-    # В некоторых тестах передается список со словарем внутри, в то время как
-    # API яндекса передает просто словарь.
     if isinstance(response, list):
         response = response[0]
 
@@ -116,8 +110,6 @@ def parse_status(homework):
     homework_name = homework.get('homework_name')
 
     if homework_name is None:
-        # Именно в этой точке тесты ожидают получить KeyError
-        # Хотя в других местах пропускают любое исключение
         raise KeyError('Нехватка данных в API-ответе')
 
     if homework_status not in VERDICTS.keys():
